@@ -12,7 +12,7 @@ MINOR = 9
 MICRO = 0
 ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
-QUALIFIER = 'rc1'
+QUALIFIER = ''
 
 
 DISTNAME = 'xarray'
@@ -141,4 +141,4 @@ setup(name=DISTNAME,
       tests_require=TESTS_REQUIRE,
       url=URL,
       packages=find_packages(),
-      package_data={'xarray': ['test/data/*', 'plot/default_colormap.csv']})
+      package_data={'xarray': ['tests/data/*', 'plot/default_colormap.csv']})

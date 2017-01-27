@@ -856,7 +856,7 @@ class Variable(common.AbstractArray, utils.NdimSizeLenMixin):
         return result
 
     def fillna(self, value):
-        return self._fillna(value)
+        return ops.fillna(self, value)
 
     def where(self, cond):
         return self._where(cond)
@@ -1067,8 +1067,8 @@ class Variable(common.AbstractArray, utils.NdimSizeLenMixin):
 
         See Also
         --------
-        np.nanpercentile, pd.Series.quantile,
-        xr.Dataset.quantile, xr.DataArray.quantile
+        numpy.nanpercentile, pandas.Series.quantile, Dataset.quantile,
+        DataArray.quantile
         """
 
         if isinstance(self.data, dask_array_type):

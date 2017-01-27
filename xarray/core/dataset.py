@@ -358,6 +358,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
             self._set_init_vars_and_dims(data_vars, coords, compat)
         if attrs is not None:
             self.attrs = attrs
+        self._encoding = None
         self._initialized = True
 
     def _set_init_vars_and_dims(self, data_vars, coords, compat):
@@ -408,6 +409,18 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
     @attrs.setter
     def attrs(self, value):
         self._attrs = OrderedDict(value)
+
+    @property
+    def encoding(self):
+        """Dictionary of global encoding attributes on this dataset
+        """
+        if self._encoding is None:
+            self._encoding = {}
+        return self._encoding
+
+    @encoding.setter
+    def encoding(self, value):
+        self._encoding = dict(value)
 
     @property
     def dims(self):
@@ -479,7 +492,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
 
     @classmethod
     def _construct_direct(cls, variables, coord_names, dims=None, attrs=None,
-                          file_obj=None):
+                          file_obj=None, encoding=None):
         """Shortcut around __init__ for internal use when we want to skip
         costly validation
         """
@@ -489,6 +502,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         obj._dims = dims
         obj._attrs = attrs
         obj._file_obj = file_obj
+        obj._encoding = encoding
         obj._initialized = True
         return obj
 
@@ -858,7 +872,8 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
                 del obj._variables[name]
         return obj
 
-    def dump_to_store(self, store, encoder=None, sync=True, encoding=None):
+    def dump_to_store(self, store, encoder=None, sync=True, encoding=None,
+                      unlimited_dims=None):
         """Store dataset contents to a backends.*DataStore object."""
         if encoding is None:
             encoding = {}
@@ -874,12 +889,13 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         if encoder:
             variables, attrs = encoder(variables, attrs)
 
-        store.store(variables, attrs, check_encoding)
+        store.store(variables, attrs, check_encoding,
+                    unlimited_dims=unlimited_dims)
         if sync:
             store.sync()
 
     def to_netcdf(self, path=None, mode='w', format=None, group=None,
-                  engine=None, encoding=None):
+                  engine=None, encoding=None, unlimited_dims=None):
         """Write dataset contents to a netCDF file.
 
         Parameters
@@ -923,12 +939,18 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
             Nested dictionary with variable names as keys and dictionaries of
             variable specific encodings as values, e.g.,
             ``{'my_variable': {'dtype': 'int16', 'scale_factor': 0.1, 'zlib': True}, ...}``
+        unlimited_dims : sequence of str, optional
+            Dimension(s) that should be serialized as unlimited dimensions.
+            By default, no dimensions are treated as unlimited dimensions.
+            Note that unlimited_dims may also be set via
+            ``dataset.encoding['unlimited_dims']``.
         """
         if encoding is None:
             encoding = {}
         from ..backends.api import to_netcdf
         return to_netcdf(self, path, mode, format=format, group=group,
-                         engine=engine, encoding=encoding)
+                         engine=engine, encoding=encoding,
+                         unlimited_dims=unlimited_dims)
 
     def __unicode__(self):
         return formatting.dataset_repr(self)
@@ -1263,6 +1285,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
             # dim is a string
             dim_name = dim
             dim_coord = None
+<<<<<<< HEAD
 
         reordered = self.transpose(*(list(indexer_dims) + list(non_indexed_dims)))
 
@@ -1284,6 +1307,29 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
                 # If not indexed just add it back to variables or coordinates
                 variables[name] = var
 
+=======
+
+        reordered = self.transpose(*(list(indexer_dims) + list(non_indexed_dims)))
+
+        variables = OrderedDict()
+
+        for name, var in reordered.variables.items():
+            if name in indexers_dict or any(d in indexer_dims for d in var.dims):
+                # slice if var is an indexer or depends on an indexed dim
+                slc = [indexers_dict[k]
+                       if k in indexers_dict
+                       else slice(None) for k in var.dims]
+
+                var_dims = [dim_name] + [d for d in var.dims
+                                         if d in non_indexed_dims]
+                selection = take(var, tuple(slc))
+                var_subset = type(var)(var_dims, selection, var.attrs)
+                variables[name] = var_subset
+            else:
+                # If not indexed just add it back to variables or coordinates
+                variables[name] = var
+
+>>>>>>> pydata/master
         coord_names = set(coords) & set(variables)
 
         dset = self._replace_vars_and_dims(variables, coord_names=coord_names)
@@ -1398,7 +1444,8 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         return self.reindex(method=method, copy=copy, tolerance=tolerance,
                             **indexers)
 
-    def reindex(self, indexers=None, method=None, tolerance=None, copy=True, **kw_indexers):
+    def reindex(self, indexers=None, method=None, tolerance=None, copy=True,
+                **kw_indexers):
         """Conform this object onto a new set of indexes, filling in
         missing values with NaN.
 
@@ -2001,8 +2048,31 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         -------
         Dataset
         """
-        out = self._fillna(value)
-        out._copy_attrs_from(self)
+        if utils.is_dict_like(value):
+            value_keys = getattr(value, 'data_vars', value).keys()
+            if not set(value_keys) <= set(self.data_vars.keys()):
+                raise ValueError('all variables in the argument to `fillna` '
+                                 'must be contained in the original dataset')
+        out = ops.fillna(self, value)
+        return out
+
+    def combine_first(self, other):
+        """Combine two Datasets, default to data_vars of self.
+
+        The new coordinates follow the normal broadcasting and alignment rules
+        of ``join='outer'``.  Vacant cells in the expanded coordinates are
+        filled with np.nan.
+
+        Parameters
+        ----------
+        other : DataArray
+            Used to fill all matching missing values in this array.
+
+        Returns
+        -------
+        DataArray
+        """
+        out = ops.fillna(self, other, join="outer", dataset_join="outer")
         return out
 
     def reduce(self, func, dim=None, keep_attrs=False, numeric_only=False,
@@ -2240,7 +2310,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
 
         See also
         --------
-        xarray.Dataset.from_dict
+        Dataset.from_dict
         """
         d = {'coords': {}, 'attrs': decode_numpy_dict_values(self.attrs),
              'dims': dict(self.dims), 'data_vars': {}}
@@ -2292,8 +2362,8 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
 
         See also
         --------
-        xarray.Dataset.to_dict
-        xarray.DataArray.from_dict
+        Dataset.to_dict
+        DataArray.from_dict
         """
 
         if not set(['coords', 'data_vars']).issubset(set(d)):
@@ -2335,7 +2405,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         return func
 
     @staticmethod
-    def _binary_op(f, reflexive=False, join=None, fillna=False):
+    def _binary_op(f, reflexive=False, join=None):
         @functools.wraps(f)
         def func(self, other):
             if isinstance(other, groupby.GroupBy):
@@ -2344,8 +2414,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
             if hasattr(other, 'indexes'):
                 self, other = align(self, other, join=align_type, copy=False)
             g = f if not reflexive else lambda x, y: f(y, x)
-            ds = self._calculate_binary_op(g, other, join=align_type,
-                                           fillna=fillna)
+            ds = self._calculate_binary_op(g, other, join=align_type)
             return ds
 
         return func
@@ -2370,14 +2439,9 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         return func
 
     def _calculate_binary_op(self, f, other, join='inner',
-                             inplace=False, fillna=False):
+                             inplace=False):
 
         def apply_over_both(lhs_data_vars, rhs_data_vars, lhs_vars, rhs_vars):
-            if fillna and join != 'left':
-                raise ValueError('`fillna` must be accompanied by left join')
-            if fillna and not set(rhs_data_vars) <= set(lhs_data_vars):
-                raise ValueError('all variables in the argument to `fillna` '
-                                 'must be contained in the original dataset')
             if inplace and set(lhs_data_vars) != set(rhs_data_vars):
                 raise ValueError('datasets must have the same data variables '
                                  'for in-place arithmetic operations: %s, %s'
@@ -2389,12 +2453,10 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
                 if k in rhs_data_vars:
                     dest_vars[k] = f(lhs_vars[k], rhs_vars[k])
                 elif join in ["left", "outer"]:
-                    dest_vars[k] = (lhs_vars[k] if fillna else
-                                    f(lhs_vars[k], np.nan))
+                    dest_vars[k] = f(lhs_vars[k], np.nan)
             for k in rhs_data_vars:
                 if k not in dest_vars and join in ["right", "outer"]:
-                    dest_vars[k] = (rhs_vars[k] if fillna else
-                                    f(rhs_vars[k], np.nan))
+                    dest_vars[k] = f(rhs_vars[k], np.nan)
             return dest_vars
 
         if utils.is_dict_like(other) and not isinstance(other, Dataset):
@@ -2421,7 +2483,8 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
     def _copy_attrs_from(self, other):
         self.attrs = other.attrs
         for v in other.variables:
-            self.variables[v].attrs = other.variables[v].attrs
+            if v in self.variables:
+                self.variables[v].attrs = other.variables[v].attrs
 
     def diff(self, dim, n=1, label='upper'):
         """Calculate the n-th order discrete difference along given axis.
@@ -2606,14 +2669,14 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
         Parameters
         ----------
         q : float in range of [0,1] (or sequence of floats)
-            Quantile to compute, which must be between 0 and 1
-            inclusive.
+            Quantile to compute, which must be between 0 and 1 inclusive.
         dim : str or sequence of str, optional
             Dimension(s) over which to apply quantile.
         interpolation : {'linear', 'lower', 'higher', 'midpoint', 'nearest'}
             This optional parameter specifies the interpolation method to
             use when the desired quantile lies between two data points
             ``i < j``:
+
                 * linear: ``i + (j - i) * fraction``, where ``fraction`` is
                   the fractional part of the index surrounded by ``i`` and
                   ``j``.
@@ -2639,7 +2702,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, BaseDataObject,
 
         See Also
         --------
-        np.nanpercentile, pd.Series.quantile, xr.DataArray.quantile
+        numpy.nanpercentile, pandas.Series.quantile, DataArray.quantile
         """
 
         if isinstance(dim, basestring):

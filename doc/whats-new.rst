@@ -15,17 +15,34 @@ What's New
 
 .. _whats-new.0.9.0:
 
-v0.9.0 (unreleased)
--------------------
+v0.9.0 (25 January 2017)
+------------------------
 
 This major release includes five months worth of enhancements and bug fixes from
-23 contributors, including some significant changes that are not fully backwards
+24 contributors, including some significant changes that are not fully backwards
 compatible. Highlights include:
 
-- Coordinates are now *optional* in the xarray data model, even for dimensions
+- Coordinates are now *optional* in the xarray data model, even for dimensions.
 - Changes to caching, lazy loading and pickling to improve xarray's experience
-  for parallel computing
-- Improvements for accessing and manipulating ``pandas.MultiIndex`` levels
+  for parallel computing.
+- Improvements for accessing and manipulating ``pandas.MultiIndex`` levels.
+- Many new methods and functions, including
+  :py:meth:`~DataArray.quantile`,
+  :py:meth:`~DataArray.cumsum`,
+  :py:meth:`~DataArray.cumprod`
+  :py:attr:`~DataArray.combine_first`
+  :py:meth:`~DataArray.set_index`,
+  :py:meth:`~DataArray.reset_index`,
+  :py:meth:`~DataArray.reorder_levels`,
+  :py:func:`~xarray.full_like`,
+  :py:func:`~xarray.zeros_like`,
+  :py:func:`~xarray.ones_like`
+  :py:func:`~xarray.open_dataarray`,
+  :py:meth:`~DataArray.compute`,
+  :py:meth:`Dataset.info`,
+  :py:func:`testing.assert_equal`,
+  :py:func:`testing.assert_identical`, and
+  :py:func:`testing.assert_allclose`.
 
 Breaking changes
 ~~~~~~~~~~~~~~~~
@@ -128,9 +145,14 @@ Deprecations
 
 Enhancements
 ~~~~~~~~~~~~
+
+- Added new method :py:meth:`~DataArray.combine_first` to ``DataArray`` and
+  ``Dataset``, based on the pandas method of the same name (see :ref:`combine`).
+  By `Chun-Wei Yuan <https://github.com/chunweiyuan>`_.
+
 - Added the ability to change default automatic alignment (arithmetic_join="inner")
   for binary operations via :py:func:`~xarray.set_options()`
-  (see :ref:`automatic alignment`).
+  (see :ref:`math automatic alignment`).
   By `Chun-Wei Yuan <https://github.com/chunweiyuan>`_.
 
 - Add checking of ``attr`` names and values when saving to netCDF, raising useful
@@ -190,9 +212,9 @@ Enhancements
   :py:class:`FacetGrid` and :py:func:`~xarray.plot.plot`, so axes
   sharing can be disabled for polar plots.
   By `Bas Hoonhout <https://github.com/hoonhout>`_.
-- New utility functions :py:func:`~xarray.test.assert_xarray_equal`,
-  :py:func:`~xarray.test.assert_xarray_identical`, and
-  :py:func:`~xarray.test.assert_xarray_allclose` for asserting relationships
+- New utility functions :py:func:`~xarray.testing.assert_equal`,
+  :py:func:`~xarray.testing.assert_identical`, and
+  :py:func:`~xarray.testing.assert_allclose` for asserting relationships
   between xarray objects, designed for use in a pytest test suite.
 - ``figsize``, ``size`` and ``aspect`` plot arguments are now supported for all
   plots (:issue:`897`). See :ref:`plotting.figsize` for more details.
@@ -201,6 +223,10 @@ Enhancements
 - New :py:meth:`~Dataset.info` method to summarize ``Dataset`` variables
   and attributes. The method prints to a buffer (e.g. ``stdout``) with output
   similar to what the command line utility ``ncdump -h`` produces (:issue:`1150`).
+  By `Joe Hamman <https://github.com/jhamman>`_.
+- Added the ability write unlimited netCDF dimensions with the ``scipy`` and
+  ``netcdf4`` backends via the new :py:attr:`~xray.Dataset.encoding` attribute
+  or via the ``unlimited_dims`` argument to :py:meth:`~xray.Dataset.to_netcdf`.
   By `Joe Hamman <https://github.com/jhamman>`_.
 - New :py:meth:`~DataArray.quantile` method to calculate quantiles from
   DataArray objects (:issue:`1187`).
@@ -269,6 +295,20 @@ Bug fixes
 
 - Fix to make ``.copy()`` actually copy dask arrays, which will be relevant for
   future releases of dask in which dask arrays will be mutable (:issue:`1180`).
+  By `Stephan Hoyer <https://github.com/shoyer>`_.
+
+- Fix opening NetCDF files with multi-dimensional time variables
+  (:issue:`1229`).
+  By `Stephan Hoyer <https://github.com/shoyer>`_.
+
+Performance improvements
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+- :py:meth:`~xarray.Dataset.isel_points` and
+  :py:meth:`~xarray.Dataset.sel_points` now use vectorised indexing in numpy
+  and dask (:issue:`1161`), which can result in several orders of magnitude
+  speedup.
+  By `Jonathan Chambers <https://github.com/mangecoeur>`_.
 
 Performance improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~
